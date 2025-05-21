@@ -1,14 +1,11 @@
-import os
 from cozepy import Coze, TokenAuth, Message, ChatEventType, COZE_CN_BASE_URL
 import pandas as pd
 
-# 将API_TOKEN设为环境变量
-os.environ["COZE_API_TOKEN"] = ""
-
 # 初始化 Coze 客户端
-coze_api_token = os.getenv("COZE_API_TOKEN")
+coze_api_token_input = input("请输入您的个人令牌（输入后按回车）：").strip()
 coze_api_base = COZE_CN_BASE_URL
-coze = Coze(auth=TokenAuth(coze_api_token), base_url=coze_api_base)
+coze = Coze(auth=TokenAuth(coze_api_token_input), base_url=coze_api_base)
+bot_id_input = input("请输入您的bot_id（输入后按回车）：").strip()
 
 # Excel 配置
 # 其中question_column是要进行处理的列，可以根据您的需要进行更改
@@ -26,14 +23,13 @@ df = df.dropna(subset=[question_column, id_column])  # 删除空值行
 results = []
 
 # 开始处理
-for idx in range(0, len(df)):
+for idx in range(0, 1):
     question = str(df.iloc[idx][question_column]).strip()
     print(f"\n处理第 {idx + 1} 条：{question}")
     answer_text = ""
 
     for event in coze.chat.stream(
-            # 这里写您的bot_id
-            bot_id='',
+            bot_id=bot_id_input,
             user_id='user_id',
             additional_messages=[Message.build_user_question_text(question)]
     ):
