@@ -1,5 +1,7 @@
 from cozepy import Coze, TokenAuth, Message, ChatEventType, COZE_CN_BASE_URL
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
 # 初始化 Coze 客户端
 coze_api_token_input = input("请输入您的个人令牌（输入后按回车）：").strip()
@@ -22,31 +24,46 @@ df = df.dropna(subset=[question_column, id_column])  # 删除空值行
 # 创建新的结果列表（用于生成新文档）
 results = []
 
-# 开始处理
-for idx in range(0, 1):
-    question = str(df.iloc[idx][question_column]).strip()
-    print(f"\n处理第 {idx + 1} 条：{question}")
+# 用于处理单个问题的函数
+def process_question(index, question, image_id):
     answer_text = ""
-
-    for event in coze.chat.stream(
-            bot_id=bot_id_input,
+    try:
+        for event in coze.chat.stream(
+            bot_id='',
             user_id='user_id',
             additional_messages=[Message.build_user_question_text(question)]
-    ):
+        ):
+            if event.event == ChatEventType.CONVERSATION_MESSAGE_DELTA:
+                answer_text += event.message.content
+    except Exception as e:
+        print(f"❌ 第 {index + 1} 条失败：{e}")
+        answer_text = "[处理失败]"
 
-        if event.event == ChatEventType.CONVERSATION_MESSAGE_DELTA:
-            delta = event.message.content
-            print(delta, end="")
-            answer_text += delta
-
-    # 添加到结果列表
-    results.append({
-        "影像号": df.iloc[idx]["影像号"],
+    return {
+        "index": index,  # 加上原始位置
+        id_column: image_id,
         question_column: question,
         "智能体诊断结果": answer_text
-    })
+    }
 
-# 将结果写入新的 Excel 文件
+# 并发执行所有问题处理，这里线程数暂时设为5
+with ThreadPoolExecutor(max_workers=5) as executor:
+    futures = []
+    for idx, row in df.iterrows():
+        question = str(row[question_column]).strip()
+        image_id = row[id_column]
+        futures.append(executor.submit(process_question, idx, question, image_id))
+
+    for future in tqdm(as_completed(futures), total=len(futures), desc="处理进度"):
+        result = future.result()
+        results.append(result)
+
+# 排序
+results.sort(key=lambda x: x["index"])
+for r in results:
+    del r["index"]
+
+# 写入结果
 result_df = pd.DataFrame(results)
 result_df.to_excel(output_excel, index=False)
 print(f"\n回答已保存到文件：{output_excel}")
